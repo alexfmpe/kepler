@@ -12,12 +12,4 @@ buildGoModule rec {
   };
 
   modSha256 = "08f03haxzpi57gaxymsbzs0nbbgnf6z4gmpal476xy3gvc0dyi3r";
-
-  meta = with stdenv.lib; {
-    description = "Byzantine-Fault Tolerant State Machines. Or Blockchain, for short.";
-    homepage = https://tendermint.com/;
-    license = licenses.asl20;
-    maintainers = with maintainers; [ alexfmpe ];
-    platforms = platforms.linux ++ platforms.darwin;
-  };
 }

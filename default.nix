@@ -6,6 +6,7 @@ let
     sha256 = "0jigsyxlwl5hmsls4bqib0rva41biki6mwnswgmigwq41v6q7k94";
   }) { inherit config; };
 
+  iavl = pkgs.callPackage ./iavl.nix {};
   tendermint = pkgs.callPackage ./tendermint.nix {};
 
   packages = {
@@ -46,10 +47,10 @@ let
   };
 
   extra-build-inputs = with pkgs; {
-    hs-abci-sdk = [protobuf];
+    hs-abci-sdk = [protobuf iavl];
     hs-abci-types = [protobuf];
-    hs-iavl-client = [protobuf];
-    simple-storage = [protobuf];
+    hs-iavl-client = [protobuf iavl];
+    simple-storage = [protobuf iavl tendermint];
     hs-tendermint-client = [tendermint];
   };
 
@@ -132,6 +133,12 @@ let
     in
       builtins.mapAttrs (name: pkg: pkg.overrideAttrs (addBuildInputs (extra-build-inputs.${name} or []))) allOverrides;
 
+  withIavl = pkg: pkgs.lib.overrideDerivation pkg (drv: {
+    checkPhase = ''
+      iavlserver  -db-name "test" -datadir "."  -grpc-endpoint "0.0.0.0:8090"  -gateway-endpoint "0.0.0.0:8091" &
+    '' + drv.checkPhase;
+  });
+
   config = {
     packageOverrides = pkgs: {
       haskellPackages = pkgs.haskellPackages.override {
@@ -141,21 +148,38 @@ let
             # https://github.com/haskell-haskey/xxhash-ffi/issues/2
             avl-auth = pkgs.haskell.lib.dontCheck super.avl-auth;
 
+            hs-tendermint-client = pkgs.haskell.lib.dontCheck super.hs-tendermint-client;
+            /*
             hs-tendermint-client = pkgs.lib.overrideDerivation super.hs-tendermint-client (drv: {
               checkPhase = ''
+                abci-cli kvstore &
                 tendermint init --home $TMPDIR
-                tendermint node --home $TMPDIR --proxy_app=kvstore &
+                tendermint node --home $TMPDIR &
                 sleep 3
                 '' + drv.checkPhase;
             });
-           #                 abci-cli kvstore &
-# --rpc.laddr tcp://localhost:26657 --proxy_app=tcp://0.0.0.0:26658 &
-#--proxy_app=tcp://kvstore:26658
-            hs-abci-sdk = pkgs.haskell.lib.dontCheck super.hs-abci-sdk;
-#            hs-tendermint-client = pkgs.haskell.lib.dontCheck super.hs-tendermint-client;
-            hs-iavl-client = pkgs.haskell.lib.dontCheck super.hs-iavl-client;
+            */
+
+            hs-iavl-client = withIavl super.hs-iavl-client;
+            hs-abci-sdk = withIavl super.hs-abci-sdk;
+
             simple-storage = pkgs.haskell.lib.dontCheck super.simple-storage;
-            nameservice = pkgs.haskell.lib.dontCheck super.nameservice;
+            /*
+            simple-storage: Network.Socket.getAddrInfo (called with preferred socket type/protocol: AddrInfo {addrFlags = [AI_NUMERICSERV], addrFamily = AF_UNSPEC, addrSocketType = Stream, addrProtocol = 0, addrAddress = <assumed to be undefined>, addrCanonName = <assumed to be undefined>}, host name: Just "iavl", service name: Just "8090"): does not exist (Name or service not known)
+            */
+            /*
+            simple-storage = pkgs.lib.overrideDerivation super.simple-storage (drv: {
+              checkPhase = ''
+                iavlserver -db-name "test" -datadir "."  -grpc-endpoint "0.0.0.0:8090"  -gateway-endpoint "0.0.0.0:8091" &
+                IAVL_HOST=iavl IAVL_PORT=8090 dist/build/simple-storage/simple-storage
+                sleep 3
+                tendermint init --home $TMPDIR
+                tendermint node --home $TMPDIR --proxy_app=tcp://simple-storage:26658 &
+                sleep 3
+                '' + drv.checkPhase;
+            });
+            */
+#            nameservice = pkgs.haskell.lib.dontCheck super.nameservice;
 
             proto3-suite = pkgs.haskell.lib.dontCheck super.proto3-suite;
 
@@ -187,7 +211,7 @@ let
 
 in {
   inherit pkgs overrides;
-  inherit tendermint;
+  inherit iavl tendermint;
 
   packages = {
     inherit (pkgs.haskellPackages)
