@@ -6,6 +6,8 @@ let
     sha256 = "0jigsyxlwl5hmsls4bqib0rva41biki6mwnswgmigwq41v6q7k94";
   }) { inherit config; };
 
+  tendermint = pkgs.callPackage ./tendermint.nix {};
+
   packages = {
     hs-abci-extra = ./hs-abci-extra;
     hs-abci-sdk = ./hs-abci-sdk;
@@ -48,6 +50,7 @@ let
     hs-abci-types = [protobuf];
     hs-iavl-client = [protobuf];
     simple-storage = [protobuf];
+    hs-tendermint-client = [tendermint];
   };
 
   addBuildInputs = inputs: { buildInputs ? [], ... }: { buildInputs = inputs ++ buildInputs; };
@@ -138,8 +141,18 @@ let
             # https://github.com/haskell-haskey/xxhash-ffi/issues/2
             avl-auth = pkgs.haskell.lib.dontCheck super.avl-auth;
 
+            hs-tendermint-client = pkgs.lib.overrideDerivation super.hs-tendermint-client (drv: {
+              checkPhase = ''
+                tendermint init --home $TMPDIR
+                tendermint node --home $TMPDIR --proxy_app=kvstore &
+                sleep 3
+                '' + drv.checkPhase;
+            });
+           #                 abci-cli kvstore &
+# --rpc.laddr tcp://localhost:26657 --proxy_app=tcp://0.0.0.0:26658 &
+#--proxy_app=tcp://kvstore:26658
             hs-abci-sdk = pkgs.haskell.lib.dontCheck super.hs-abci-sdk;
-            hs-tendermint-client = pkgs.haskell.lib.dontCheck super.hs-tendermint-client;
+#            hs-tendermint-client = pkgs.haskell.lib.dontCheck super.hs-tendermint-client;
             hs-iavl-client = pkgs.haskell.lib.dontCheck super.hs-iavl-client;
             simple-storage = pkgs.haskell.lib.dontCheck super.simple-storage;
             nameservice = pkgs.haskell.lib.dontCheck super.nameservice;
@@ -174,6 +187,7 @@ let
 
 in {
   inherit pkgs overrides;
+  inherit tendermint;
 
   packages = {
     inherit (pkgs.haskellPackages)
